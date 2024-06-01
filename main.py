@@ -4,7 +4,7 @@ import os, subprocess, zipfile, re
 from tkinterdnd2 import DND_FILES, TkinterDnD
 import win32gui, win32con, ctypes
 
-VERSION_NUMBER = 0.3
+VERSION_NUMBER = 0.4
 
 def minimize_console():
     # Get the console window handle
@@ -134,9 +134,6 @@ def push_cfg():
             messagebox.showerror("Error", f"Error occurred: {ex}")
             print(f"Error occurred: {ex}")
             return False
-
-
-
 
     def select_cfg():
         global push_files, multi_files
@@ -280,8 +277,6 @@ def push_cfg():
                 push_files = []
                 lbl_cfg_file.config(text="No valid file selected.")
                 messagebox.showerror("Error", "No valid CFG files were selected.")
-
-
                 
     push_cfg_window.drop_target_register(DND_FILES)
     push_cfg_window.dnd_bind('<<DragEnter>>', on_drag_enter)
@@ -380,31 +375,61 @@ def game_manager():
 
     def uninstall_game(game_id):
         pushError = False
+        errorString = ""
+        
+        # Retrieve image paths before deleting the game
+        jpeg_command = ["adb", "-s", selected_device, "shell", "sqlite3", DATABASE_PATH, f"\"SELECT ImgBg,ImgINST FROM GAME WHERE ID='{game_id}';\""]
+        jpegs = run_adb_command(jpeg_command)
+        if jpegs is None:
+            errorString += "Failed to retrieve BKG/INS images.\n"
+            pushError = True
+        else:
+            jpegs = jpegs.split('|')
+            bkgImg = jpegs[0]
+            insImg = jpegs[1]
+
+        # Delete the game and config entries
         db_command = ["adb", "-s", selected_device, "shell", "sqlite3", DATABASE_PATH, f"\"DELETE FROM GAME WHERE ID='{game_id}';\""]
         config_command = ["adb", "-s", selected_device, "shell", "sqlite3", DATABASE_PATH, f"\"DELETE FROM CONFIG WHERE ID='{game_id}';\""]
-        jpeg_command = ["adb", "-s", selected_device, "shell", "sqlite3", DATABASE_PATH, f"\"SELECT ImgBg,ImgINST FROM GAME WHERE ID='{game_id}';\""]
         
         if run_adb_command(db_command) is None:
-            errorString = "Failed to delete from GAME database."
+            errorString += "Failed to delete from GAME database.\n"
             pushError = True
         if run_adb_command(config_command) is None:
-            errorString = "Failed to delete from CONFIG database."
+            errorString += "Failed to delete from CONFIG database.\n"
             pushError = True
-        if run_adb_command(jpeg_command) is None:
-            errorString = "Failed to retrieve BKG/INS images."
-            pushError = True
-        if(pushError):
+        
+        if pushError:
             messagebox.showerror("Error", errorString)
             return
-        
+
+        # Remove the game file
         if game_id.endswith(".zip"):  # MAME ROM
-            remove_command = ["adb", "-s", selected_device, "shell", "rm", f"{GAME_FOLDER_PATH}/{game_id}"]
+            remove_command = ["adb", "-s", selected_device, "shell", "rm", f"\"{GAME_FOLDER_PATH}/{game_id}\""]
             if run_adb_command(remove_command) is not None:
                 messagebox.showinfo("Success", f"MAME ROM {game_id} uninstalled.")
+            else:
+                messagebox.showerror("Error", f"Error deleting {game_id}")
         else:  # Android application
             uninstall_command = ["adb", "-s", selected_device, "uninstall", game_id]
             if run_adb_command(uninstall_command) is not None:
                 messagebox.showinfo("Success", f"Android app {game_id} uninstalled.")
+            else:
+                messagebox.showerror("Error", f"Error deleting {game_id}")
+
+        # Delete the background image
+        if bkgImg:
+            print(f"Deleting {bkgImg}...")
+            bkgDelete = ["adb", "-s", selected_device, "shell", "rm", f"\"/sdcard/Game/Background/{bkgImg}\""]
+            if run_adb_command(bkgDelete) is None:
+                messagebox.showerror("Error", f"Error deleting {bkgImg}")
+
+        # Delete the instruction image
+        if insImg:
+            print(f"Deleting {insImg}...")
+            insDelete = ["adb", "-s", selected_device, "shell", "rm", f"\"/sdcard/Game/Instruction/{insImg}\""]
+            if run_adb_command(insDelete) is None:
+                messagebox.showerror("Error", f"Error deleting {insImg}")
 
     def list_installed_games():
         # Query the SQLite database for all games
@@ -976,7 +1001,7 @@ buttons = [
 
 for i, (text, command) in enumerate(buttons):
     btn = tk.Button(root, text=text, command=command)
-    btn.grid(row=i//3, column=i%3, padx=10, pady=10, sticky="nsew")
+    btn.grid(row=i//3, column=i%3, padx=12, pady=10, sticky="nsew")
 
 # Listbox for LBDevices
 lb_devices = tk.Listbox(root, height=4)  # Adjust height as needed
