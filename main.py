@@ -1,14 +1,27 @@
 import tkinter as tk
-from tkinter import messagebox, filedialog, simpledialog, ttk
-import os, subprocess
-from datetime import datetime
+from tkinter import messagebox, filedialog, ttk
+import os, subprocess, zipfile, re
 from tkinterdnd2 import DND_FILES, TkinterDnD
+import win32gui, win32con, ctypes
+
+VERSION_NUMBER = 0.3
+
+def minimize_console():
+    # Get the console window handle
+    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+    
+    if hwnd:
+        # Minimize the window
+        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+
+# Minimize the console window at the start
+minimize_console()
 
 # Initialize the main window
 # Load the tkdnd library
 root = TkinterDnD.Tk()
 
-root.title("iRmyKnife v0.1 by HonkeyKong")
+root.title(f"iiRmyKnife v{VERSION_NUMBER} by HonkeyKong")
 
 # Set the grid layout
 root.grid_columnconfigure((0, 1, 2), weight=1)
@@ -27,96 +40,102 @@ def push_cfg():
 
     def validate_cfg(file_path):
         xsd_data = """
-        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+                <xs:element name="mameconfig">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="system" type="SystemType"/>
+                        </xs:sequence>
+                        <xs:attribute name="version" type="xs:string" use="required"/>
+                    </xs:complexType>
+                </xs:element>
 
-            <xs:element name="mameconfig">
-                <xs:complexType>
-                    <xs:sequence>
-                        <xs:element name="system" type="SystemType"/>
-                    </xs:sequence>
-                    <xs:attribute name="version" type="xs:string" use="required"/>
-                </xs:complexType>
-            </xs:element>
-
-            <xs:complexType name="SystemType">
-                <xs:sequence>
-                    <xs:choice maxOccurs="unbounded">
+                <xs:complexType name="SystemType">
+                    <xs:all>
                         <xs:element name="input" type="InputType"/>
                         <xs:element name="crosshairs" type="CrosshairsType" minOccurs="0"/>
                         <xs:element name="ui_warnings" type="UiWarningsType" minOccurs="0"/>
-                    </xs:choice>
-                </xs:sequence>
-                <xs:attribute name="name" type="xs:string" use="required"/>
-            </xs:complexType>
+                    </xs:all>
+                    <xs:attribute name="name" type="xs:string" use="required"/>
+                </xs:complexType>
 
-            <xs:complexType name="InputType">
-                <xs:sequence>
-                    <xs:element name="port" type="PortType" maxOccurs="unbounded"/>
-                </xs:sequence>
-            </xs:complexType>
+                <xs:complexType name="InputType">
+                    <xs:sequence>
+                        <xs:element name="port" type="PortType" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
 
-            <xs:complexType name="PortType">
-                <xs:sequence>
-                    <xs:element name="newseq" type="NewSeqType" minOccurs="0" maxOccurs="unbounded"/>
-                </xs:sequence>
-                <xs:attribute name="tag" type="xs:string" use="required"/>
-                <xs:attribute name="type" type="xs:string" use="required"/>
-                <xs:attribute name="mask" type="xs:string" use="required"/>
-                <xs:attribute name="defvalue" type="xs:string" use="required"/>
-            </xs:complexType>
+                <xs:complexType name="PortType">
+                    <xs:sequence>
+                        <xs:element name="newseq" type="NewSeqType" minOccurs="0" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                    <xs:attribute name="tag" type="xs:string" use="required"/>
+                    <xs:attribute name="type" type="xs:string" use="required"/>
+                    <xs:attribute name="mask" type="xs:string" use="required"/>
+                    <xs:attribute name="defvalue" type="xs:string" use="required"/>
+                </xs:complexType>
 
-            <xs:complexType name="NewSeqType">
-                <xs:simpleContent>
-                    <xs:extension base="xs:string">
-                        <xs:attribute name="type" type="xs:string" use="required"/>
-                    </xs:extension>
-                </xs:simpleContent>
-            </xs:complexType>
+                <xs:complexType name="NewSeqType">
+                    <xs:simpleContent>
+                        <xs:extension base="xs:string">
+                            <xs:attribute name="type" type="xs:string" use="required"/>
+                        </xs:extension>
+                    </xs:simpleContent>
+                </xs:complexType>
 
-            <xs:complexType name="CrosshairsType">
-                <xs:sequence>
-                    <xs:element name="crosshair" type="CrosshairType" maxOccurs="unbounded"/>
-                </xs:sequence>
-            </xs:complexType>
+                <xs:complexType name="CrosshairsType">
+                    <xs:sequence>
+                        <xs:element name="crosshair" type="CrosshairType" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
 
-            <xs:complexType name="CrosshairType">
-                <xs:attribute name="player" type="xs:string" use="required"/>
-                <xs:attribute name="mode" type="xs:string" use="required"/>
-            </xs:complexType>
+                <xs:complexType name="CrosshairType">
+                    <xs:attribute name="player" type="xs:string" use="required"/>
+                    <xs:attribute name="mode" type="xs:string" use="required"/>
+                </xs:complexType>
 
-            <xs:complexType name="UiWarningsType">
-                <xs:sequence>
-                    <xs:element name="feature" type="FeatureType" maxOccurs="unbounded"/>
-                </xs:sequence>
-                <xs:attribute name="launched" type="xs:string" use="optional"/>
-                <xs:attribute name="warned" type="xs:string" use="optional"/>
-            </xs:complexType>
+                <xs:complexType name="UiWarningsType">
+                    <xs:sequence>
+                        <xs:element name="feature" type="FeatureType" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                    <xs:attribute name="launched" type="xs:string" use="required"/>
+                    <xs:attribute name="warned" type="xs:string" use="required"/>
+                </xs:complexType>
 
-            <xs:complexType name="FeatureType">
-                <xs:attribute name="device" type="xs:string" use="required"/>
-                <xs:attribute name="type" type="xs:string" use="required"/>
-                <xs:attribute name="status" type="xs:string" use="required"/>
-            </xs:complexType>
+                <xs:complexType name="FeatureType">
+                    <xs:attribute name="device" type="xs:string" use="required"/>
+                    <xs:attribute name="type" type="xs:string" use="required"/>
+                    <xs:attribute name="status" type="xs:string" use="required"/>
+                </xs:complexType>
 
-        </xs:schema>
+            </xs:schema>
         """
         try:
             from lxml import etree
             schema_root = etree.XML(xsd_data)
             schema = etree.XMLSchema(schema_root)
-            parser = etree.XMLParser(schema=schema)
-            
+            parser = etree.XMLParser(schema=schema, recover=True)  # Enable recovery mode
+
             # Read/print the file content
             with open(file_path, 'r', encoding='utf-8') as f:
                 file_content = f.read()
                 # print("File Content:\n", file_content)  # Debugging line
-                etree.fromstring(file_content, parser)
-            
+                doc = etree.fromstring(file_content, parser)
+
+                # Validate the parsed document against the schema
+                schema.assertValid(doc)
+
             return True
-        except Exception as ex:
+        except etree.DocumentInvalid as ex:
             messagebox.showerror("Error", f"Validation failed: {ex}")
             print(f"Validation failed: {ex}")
             return False
+        except Exception as ex:
+            messagebox.showerror("Error", f"Error occurred: {ex}")
+            print(f"Error occurred: {ex}")
+            return False
+
+
 
 
     def select_cfg():
@@ -228,20 +247,32 @@ def push_cfg():
         event.widget.config(relief="raised")
 
     def on_drop(event):
-        files = event.data.split()
+        # Use regular expression to extract file paths
+        files = re.findall(r'\{.*?\}|\S+', event.data)
         global push_files, multi_files
         push_files = []
         if len(files) == 1:
-            if validate_cfg(files[0]):
+            # Remove curly braces if present
+            cleaned_file = files[0].strip('{}')
+            print(f"Validating {cleaned_file}...")
+            if validate_cfg(cleaned_file):
                 multi_files = False
-                push_files = [files[0]]
-                lbl_cfg_file.config(text=f"File opened: {files[0]}")
+                push_files = [cleaned_file]
+                lbl_cfg_file.config(text=f"File opened: {cleaned_file}")
         else:
             multi_files = True
             valid_files = []
             for file in files:
-                if os.path.exists(file) and validate_cfg(file):
-                    valid_files.append(file)
+                # Remove curly braces if present
+                cleaned_file = file.strip('{}')
+                print(f"Validating {cleaned_file}...")
+                if os.path.exists(cleaned_file):
+                    if validate_cfg(cleaned_file):
+                        valid_files.append(cleaned_file)
+                    else:
+                        print(f"File {cleaned_file} not valid.")
+                else:
+                    print(f"File {cleaned_file} does not exist.")
             if valid_files:
                 push_files = valid_files
                 lbl_cfg_file.config(text=f"{len(valid_files)} files loaded.")
@@ -250,6 +281,8 @@ def push_cfg():
                 lbl_cfg_file.config(text="No valid file selected.")
                 messagebox.showerror("Error", "No valid CFG files were selected.")
 
+
+                
     push_cfg_window.drop_target_register(DND_FILES)
     push_cfg_window.dnd_bind('<<DragEnter>>', on_drag_enter)
     push_cfg_window.dnd_bind('<<DragLeave>>', on_drag_leave)
@@ -349,12 +382,16 @@ def game_manager():
         pushError = False
         db_command = ["adb", "-s", selected_device, "shell", "sqlite3", DATABASE_PATH, f"\"DELETE FROM GAME WHERE ID='{game_id}';\""]
         config_command = ["adb", "-s", selected_device, "shell", "sqlite3", DATABASE_PATH, f"\"DELETE FROM CONFIG WHERE ID='{game_id}';\""]
+        jpeg_command = ["adb", "-s", selected_device, "shell", "sqlite3", DATABASE_PATH, f"\"SELECT ImgBg,ImgINST FROM GAME WHERE ID='{game_id}';\""]
         
         if run_adb_command(db_command) is None:
             errorString = "Failed to delete from GAME database."
             pushError = True
         if run_adb_command(config_command) is None:
             errorString = "Failed to delete from CONFIG database."
+            pushError = True
+        if run_adb_command(jpeg_command) is None:
+            errorString = "Failed to retrieve BKG/INS images."
             pushError = True
         if(pushError):
             messagebox.showerror("Error", errorString)
@@ -370,20 +407,29 @@ def game_manager():
                 messagebox.showinfo("Success", f"Android app {game_id} uninstalled.")
 
     def list_installed_games():
+        # Query the SQLite database for all games
+        selected_device = selected_device_serial
         query_command = ["adb", "-s", selected_device, "shell", "sqlite3", DATABASE_PATH, "\"SELECT * FROM GAME;\""]
         output = run_adb_command(query_command)
         if output:
             games = output.split('\n')
-            game_listbox.delete(0, tk.END)
+            game_details = []
             for game in games:
                 details = game.split('|')
                 if len(details) >= 4:  # Ensure there are enough elements
                     game_number = details[0]
                     game_id = details[1]
                     game_name = details[3]
-                    game_listbox.insert(tk.END, f"Number: {game_number}, ID: {game_id}, Name: {game_name}")
+                    game_details.append((game_number, game_id, game_name))
                 else:
                     print(f"Unexpected game format: {game}")  # Log unexpected formats
+
+            # Sort the game_details list alphabetically by game_id
+            sorted_games = sorted(game_details, key=lambda x: x[2])
+
+            game_listbox.delete(0, tk.END)  # Clear existing entries
+            for game_number, game_id, game_name in sorted_games:
+                game_listbox.insert(tk.END, f"Number: {game_number}, ID: {game_id}, Name: {game_name}")
 
     def uninstall_game_prompt():
         selected = game_listbox.curselection()
@@ -405,6 +451,111 @@ def game_manager():
             uninstall_game(game_id)
             list_installed_games()
 
+    def extract_game():
+        selected = game_listbox.curselection()
+        if not selected:
+            messagebox.showwarning("Warning", "No game selected.")
+            return
+
+        selected_index = selected[0]
+        game_info = game_listbox.get(selected_index)
+        try:
+            game_id = game_info.split(", ID: ")[1].split(", Name:")[0]
+            game_name = game_info.split(", Name: ")[1]
+        except IndexError:
+            messagebox.showerror("Error", "Failed to parse game info.")
+            return
+
+        if not game_id:
+            return
+
+        if game_id.split('.')[-1].lower() != "zip":
+            messagebox.showerror("Error", "Game ID must be a MAME ROM.")
+            return
+
+        game_command = ["adb", "-s", selected_device_serial, "shell", "sqlite3", DATABASE_PATH, f"\"SELECT Version,Name,Genre,GameType,HDMIOut,Rating,JoystickType,Display,ImgBg,ImgINST FROM GAME WHERE ID='{game_id}';\""]
+        print(f"Running command: {' '.join(game_command)}")  # Debugging line
+        game_data = run_adb_command(game_command)
+        if game_data is None:
+            messagebox.showerror("Error", "Could not extract game info.")
+            return
+        game_data = game_data.split('|')
+
+        cfg_content = ""
+        column = 0
+        while column < 8:
+            cfg_content += f"{game_data[column]}#\n"
+            column += 1
+
+        config_command = ["adb", "-s", selected_device_serial, "shell", "sqlite3", DATABASE_PATH, f"\"SELECT Keymap FROM CONFIG WHERE ID='{game_id}';\""]
+        print(f"Running command: {' '.join(config_command)}")  # Debugging line
+        config_data = run_adb_command(config_command)
+        if config_data is None:
+            messagebox.showerror("Error", "Could not extract config info.")
+            return
+        config_data = config_data.split('#')
+        for map in config_data:
+            line = map.strip('\n')
+            cfg_content += f"{line}#\n"
+
+        bgImg = game_data[8]
+        insImg = game_data[9]
+        print(f"Background image: {bgImg}")
+        print(f"Instruction image: {insImg}")
+
+        bg_img_path = f"/sdcard/Game/Background/{bgImg}"
+        ins_img_path = f"/sdcard/Game/Instruction/{insImg}"
+
+        # Pull the background image
+        bg_cmd = ["adb", "-s", selected_device_serial, "pull", bg_img_path]
+        print(f"Running command: {' '.join(bg_cmd)}")  # Debugging line
+        if run_adb_command(bg_cmd) is None:
+            print(f"Error retrieving background image: {bg_img_path}")
+            messagebox.showerror("Error", f"Error retrieving background image: {bg_img_path}")
+
+        # Pull the instruction image
+        ins_cmd = ["adb", "-s", selected_device_serial, "pull", ins_img_path]
+        print(f"Running command: {' '.join(ins_cmd)}")  # Debugging line
+        if run_adb_command(ins_cmd) is None:
+            print(f"Error retrieving instruction image: {ins_img_path}")
+            messagebox.showerror("Error", f"Error retrieving instruction image: {ins_img_path}")
+
+        game_path = f"/sdcard/Game/Games/{game_id}"
+        game_cmd = ["adb", "-s", selected_device_serial, "pull", game_path]
+        print(f"Running command: {' '.join(game_cmd)}")  # Debugging line
+        if run_adb_command(game_cmd) is None:
+            print(f"Error retrieving game ROM: {game_path}")
+            messagebox.showerror("Error", f"Error retrieving game ROM: {game_path}")
+
+        # Write the CFG file
+        cfg_filename = f"{game_id.split('.')[0]}.cfg"
+        with open(cfg_filename, 'w', encoding='utf-8') as cfg_file:
+            cfg_file.write(cfg_content)
+
+        # Create ZIP file structure
+        zip_filename = f"{game_id.split('.')[0]}_extracted.zip"
+        with zipfile.ZipFile(zip_filename, 'w') as zipf:
+            zipf.write(cfg_filename, f"games/{cfg_filename}")
+
+            if os.path.exists(bgImg):
+                zipf.write(bgImg, f"games/background/{bgImg}")
+            if os.path.exists(insImg):
+                zipf.write(insImg, f"games/instruction/{insImg}")
+            if os.path.exists(game_id):
+                zipf.write(game_id, f"games/games/{game_id}")
+
+        # Clean up temporary files
+        os.remove(cfg_filename)
+        if os.path.exists(bgImg):
+            os.remove(bgImg)
+        if os.path.exists(insImg):
+            os.remove(insImg)
+        if os.path.exists(game_id):
+            os.remove(game_id)
+
+        messagebox.showinfo("Success", f"Game {game_id} extracted and zipped successfully.")
+
+
     # Create the game manager window
     game_manager_window = tk.Toplevel(root)
     game_manager_window.title("iiRcade Game Manager")
@@ -421,9 +572,15 @@ def game_manager():
     uninstall_button = tk.Button(button_frame, text="Uninstall Game", command=uninstall_game_prompt)
     uninstall_button.pack(side=tk.LEFT, padx=5)
 
+    # Extract game button
+    extract_button = tk.Button(button_frame, text="Extract Game", command=extract_game)
+    extract_button.pack(side=tk.LEFT, padx=5)
+
     # Create a listbox to display the list of games
+    global game_listbox
     game_listbox = tk.Listbox(game_manager_window, width=80, height=20)
     game_listbox.pack(pady=10)
+
 
 def push_artwork():
     if not selected_device_serial:
@@ -444,7 +601,7 @@ def push_artwork():
         # Verify that a ZIP file is selected and exists
         if file_path and file_path.lower().endswith('.zip') and os.path.exists(file_path):
             lbl_artwork_file.config(text="File opened: " + file_path)
-            push_files = [file_path]  # Store as list
+            push_files = [f"\"{file_path}\""]  # Store as list
             multi_files = False
         else:
             push_files = []
@@ -481,7 +638,7 @@ def push_artwork():
 
         # Push the artwork files
         for file_path in push_files:
-            push_cmd = ["adb", "-s", selected_device, "push", file_path, "/sdcard/Android/data/org.emulator.arcade/files/artwork/"]
+            push_cmd = ["adb", "-s", selected_device, "push", file_path.strip('{').strip('}'), "/sdcard/Android/data/org.emulator.arcade/files/artwork/"]
             # print("Running ADB Command:", push_cmd)
             if run_adb_command(push_cmd) is None:
                 messagebox.showerror("Error", f"Failed to push {file_path}.")
@@ -513,19 +670,24 @@ def push_artwork():
         event.widget.config(relief="raised")
 
     def on_drop(event):
-        files = event.data.split()
+        files = event.data.split('\n')  # Split the string by newline characters
         global push_files, multi_files
         push_files = []
         if len(files) == 1:
             multi_files = False
-            push_files = [files[0]]  # Store as list
-            lbl_artwork_file.config(text=f"File opened: {files[0]}")
+            # Remove curly braces if present
+            cleaned_file = files[0].strip('{}')
+            push_files = [cleaned_file]  # Store as list
+            lbl_artwork_file.config(text=f"File opened: {cleaned_file}")
         else:
             multi_files = True
             for file in files:
-                if os.path.exists(file):
-                    push_files.append(file)
-            lbl_artwork_file.config(text=f"{len(files)} files loaded.")
+                # Remove curly braces if present
+                cleaned_file = file.strip('{}')
+                if os.path.exists(cleaned_file):
+                    push_files.append(cleaned_file)
+            lbl_artwork_file.config(text=f"{len(push_files)} files loaded.")
+
 
     push_artwork_window.drop_target_register(DND_FILES)
     push_artwork_window.dnd_bind('<<DragEnter>>', on_drag_enter)
@@ -648,19 +810,41 @@ def push_sounds():
         event.widget.config(relief="raised")
 
     def on_drop(event):
-        files = event.data.split()
+        # Use regular expression to extract file paths
+        files = re.findall(r'\{.*?\}|\S+', event.data)
         global push_files, multi_files
         push_files = []
         if len(files) == 1:
             multi_files = False
-            push_files = [files[0]]
-            lbl_sample_file.config(text=f"File opened: {files[0]}")
+            # Remove curly braces if present
+            cleaned_file = files[0].strip('{}')
+            if os.path.exists(cleaned_file):
+                push_files = [cleaned_file]  # Store as list
+                lbl_sample_file.config(text=f"File opened: {cleaned_file}")
+            else:
+                lbl_sample_file.config(text="No valid file selected.")
+                messagebox.showerror("Error", "Selected file does not exist.")
         else:
             multi_files = True
+            valid_files = []
             for file in files:
-                if os.path.exists(file):
-                    push_files += [file]
-            lbl_sample_file.config(text=f"{len(files)} files loaded.")
+                # Remove curly braces if present
+                cleaned_file = file.strip('{}')
+                if os.path.exists(cleaned_file):
+                    valid_files.append(cleaned_file)
+                else:
+                    print(f"File {cleaned_file} does not exist.")
+            if valid_files:
+                push_files = valid_files
+                lbl_sample_file.config(text=f"{len(valid_files)} files loaded.")
+            else:
+                push_files = []
+                lbl_sample_file.config(text="No valid file selected.")
+                messagebox.showerror("Error", "No valid sample files were selected.")
+
+        print("Final list of files to push:", push_files)
+
+
 
     push_sample_window.drop_target_register(DND_FILES)
     push_sample_window.dnd_bind('<<DragEnter>>', on_drag_enter)
@@ -719,7 +903,7 @@ def developer_tools():
         if(pushError):
             messagebox.showerror("Error", "Enabling Wi-Fi debugging failed.")
         else:
-            messagebox.showinfo("Success", "Wi-Fi debugging enabled permanently.")
+            messagebox.showinfo("Success", "Wi-Fi debugging enabled permanently.\nBe aware that it can take your iiRcade\na few minutes after rebooting to\nreconnect to the network.")
 
     # Create buttons for developer tools
     btn_adb_temp = tk.Button(developer_tools_window, text="Enable ADB over Wi-Fi (Temporary)", command=enable_adb_temp)
@@ -737,15 +921,27 @@ def on_listbox_select(event):
     else:
         print("No valid selection in listbox")
 
+# def run_adb_command(command):
+#     try:
+#         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+#         if result.returncode != 0:
+#             raise Exception(result.stderr)
+#         return result.stdout
+#     except Exception as e:
+#         messagebox.showerror("Error", f"ADB command {' '.join(command)} failed: {e}")
+#         return None
+
 def run_adb_command(command):
     try:
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
-            raise Exception(result.stderr)
-        return result.stdout
+            print(f"ADB command {' '.join(command)} failed: {result.stderr.strip()}")
+            return None
+        return result.stdout.strip()
     except Exception as e:
-        messagebox.showerror("Error", f"ADB command {' '.join(command)} failed: {e}")
+        print(f"Failed to run adb command: {e}")
         return None
+
 
 def populate_devices():
     """Runs `adb devices`, parses the output, and populates the listbox."""
