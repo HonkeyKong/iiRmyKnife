@@ -5,7 +5,13 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 import win32gui, win32con, ctypes
 from lxml import etree
 
-VERSION_NUMBER = "0.5"
+VERSION_NUMBER = "0.6"
+debugEnabled = False
+
+def writeLog(*logText):
+    if(debugEnabled):
+        for line in logText:
+            print("[iiRmyKnife]:", ' '.join(map(str, logText)))
 
 def minimize_console():
     # Get the console window handle
@@ -21,7 +27,6 @@ minimize_console()
 # Initialize the main window
 # Load the tkdnd library
 root = TkinterDnD.Tk()
-
 root.title(f"iiRmyKnife v{VERSION_NUMBER} by HonkeyKong")
 
 # Set the grid layout
@@ -38,6 +43,8 @@ def push_cfg():
         return
 
     selected_device = selected_device_serial
+
+    ## Use this function to load from an external XSD file.
 
     # # Load XSD
     # with open("mameconfig.xsd", 'r') as xsd_file:
@@ -56,14 +63,13 @@ def push_cfg():
     #         return True
     #     except Exception as ex:
     #         messagebox.showerror("Error", f"Validation failed: {ex}")
-    #         print(f"Validation failed: {ex}")
+    #         writeLog(f"Validation failed: {ex}")
     #         return False
 
 
     def validate_cfg(file_path):
         xsd_data = """
             <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-
                 <xs:element name="mameconfig">
                     <xs:complexType>
                         <xs:sequence>
@@ -167,11 +173,9 @@ def push_cfg():
                 <xs:complexType name="AutoTimeType">
                     <xs:attribute name="val" type="xs:string" use="required"/>
                 </xs:complexType>
-
             </xs:schema>
-
         """
-        
+
         try:
             from lxml import etree
             schema_root = etree.XML(xsd_data)
@@ -181,7 +185,7 @@ def push_cfg():
             # Read/print the file content
             with open(file_path, 'r', encoding='utf-8') as f:
                 file_content = f.read()
-                # print("File Content:\n", file_content)  # Debugging line
+                # writeLog("File Content:\n", file_content)  # Debugging line
                 doc = etree.fromstring(file_content, parser)
 
                 # Validate the parsed document against the schema
@@ -190,11 +194,11 @@ def push_cfg():
             return True
         except etree.DocumentInvalid as ex:
             messagebox.showerror("Error", f"Validation failed: {ex}")
-            print(f"Validation failed: {ex}")
+            writeLog(f"Validation failed: {ex}")
             return False
         except Exception as ex:
             messagebox.showerror("Error", f"Error occurred: {ex}")
-            print(f"Error occurred: {ex}")
+            writeLog(f"Error occurred: {ex}")
             return False
 
     def select_cfg():
@@ -234,14 +238,14 @@ def push_cfg():
 
         # Run adb root command
         adb_root_cmd = ["adb", "-s", selected_device, "root"]
-        # print("Running ADB Command:", adb_root_cmd)
+        writeLog("Running ADB Command:", adb_root_cmd)
         run_adb_command(adb_root_cmd)
 
         # Push the CFG files
         pushError = False
         for file_path in push_files:
             push_cmd = ["adb", "-s", selected_device, "push", file_path, "/sdcard/Android/data/org.emulator.arcade/files/cfg/"]
-            # print("Running ADB Command:", push_cmd)
+            writeLog("Running ADB Command:", push_cmd)
             if run_adb_command(push_cmd) == None:
                 pushError = True
 
@@ -260,7 +264,7 @@ def push_cfg():
         cfg_names = push_files[0].split('\\')  # Use the first file in the list
         rom_name = cfg_names[-1].split('.')[0]
         lg_push_cmd = ["adb", "-s", selected_device, "push", "lightgun.zip", f"/sdcard/Android/data/org.emulator.arcade/files/artwork/lightgun/{rom_name.split('/')[-1]}.zip"]
-        # print("Running ADB Command:", lg_push_cmd)
+        writeLog("Running ADB Command:", lg_push_cmd)
         if run_adb_command(lg_push_cmd) == None:
             pushError = True
         if(pushError):
@@ -270,7 +274,7 @@ def push_cfg():
         db_loc = "/data/data/com.iircade.iiconsole/databases/Game.db"
         db_update_cmd = "\"update GAME set Reserve1='T#0#1' where GAME.ID='{rom_name}.zip';\""
         db_exec_cmd = ["adb", "-s", selected_device, "shell", "sqlite3", db_loc, db_update_cmd]
-        # print("Running ADB Command:", db_exec_cmd)
+        writeLog("Running ADB Command:", db_exec_cmd)
         if run_adb_command(db_exec_cmd) == None:
             pushError = True
         if(pushError):
@@ -313,7 +317,7 @@ def push_cfg():
         if len(files) == 1:
             # Remove curly braces if present
             cleaned_file = files[0].strip('{}')
-            print(f"Validating {cleaned_file}...")
+            writeLog(f"Validating {cleaned_file}...")
             if validate_cfg(cleaned_file):
                 multi_files = False
                 push_files = [cleaned_file]
@@ -324,14 +328,14 @@ def push_cfg():
             for file in files:
                 # Remove curly braces if present
                 cleaned_file = file.strip('{}')
-                print(f"Validating {cleaned_file}...")
+                writeLog(f"Validating {cleaned_file}...")
                 if os.path.exists(cleaned_file):
                     if validate_cfg(cleaned_file):
                         valid_files.append(cleaned_file)
                     else:
-                        print(f"File {cleaned_file} not valid.")
+                        writeLog(f"File {cleaned_file} not valid.")
                 else:
-                    print(f"File {cleaned_file} does not exist.")
+                    writeLog(f"File {cleaned_file} does not exist.")
             if valid_files:
                 push_files = valid_files
                 lbl_cfg_file.config(text=f"{len(valid_files)} files loaded.")
@@ -481,14 +485,14 @@ def game_manager():
 
         # Delete the background image
         if bkgImg:
-            print(f"Deleting {bkgImg}...")
+            writeLog(f"Deleting {bkgImg}...")
             bkgDelete = ["adb", "-s", selected_device, "shell", "rm", f"\"/sdcard/Game/Background/{bkgImg}\""]
             if run_adb_command(bkgDelete) is None:
                 messagebox.showerror("Error", f"Error deleting {bkgImg}")
 
         # Delete the instruction image
         if insImg:
-            print(f"Deleting {insImg}...")
+            writeLog(f"Deleting {insImg}...")
             insDelete = ["adb", "-s", selected_device, "shell", "rm", f"\"/sdcard/Game/Instruction/{insImg}\""]
             if run_adb_command(insDelete) is None:
                 messagebox.showerror("Error", f"Error deleting {insImg}")
@@ -509,7 +513,7 @@ def game_manager():
                     game_name = details[3]
                     game_details.append((game_number, game_id, game_name))
                 else:
-                    print(f"Unexpected game format: {game}")  # Log unexpected formats
+                    writeLog(f"Unexpected game format: {game}")  # Log unexpected formats
 
             # Sort the game_details list alphabetically by game_id
             sorted_games = sorted(game_details, key=lambda x: x[2])
@@ -561,7 +565,7 @@ def game_manager():
             return
 
         game_command = ["adb", "-s", selected_device_serial, "shell", "sqlite3", DATABASE_PATH, f"\"SELECT Version,Name,Genre,GameType,HDMIOut,Rating,JoystickType,Display,ImgBg,ImgINST FROM GAME WHERE ID='{game_id}';\""]
-        print(f"Running command: {' '.join(game_command)}")  # Debugging line
+        writeLog(f"Running command: {' '.join(game_command)}")  # Debugging line
         game_data = run_adb_command(game_command)
         if game_data is None:
             messagebox.showerror("Error", "Could not extract game info.")
@@ -575,7 +579,7 @@ def game_manager():
             column += 1
 
         config_command = ["adb", "-s", selected_device_serial, "shell", "sqlite3", DATABASE_PATH, f"\"SELECT Keymap FROM CONFIG WHERE ID='{game_id}';\""]
-        print(f"Running command: {' '.join(config_command)}")  # Debugging line
+        writeLog(f"Running command: {' '.join(config_command)}")  # Debugging line
         config_data = run_adb_command(config_command)
         if config_data is None:
             messagebox.showerror("Error", "Could not extract config info.")
@@ -587,31 +591,31 @@ def game_manager():
 
         bgImg = game_data[8]
         insImg = game_data[9]
-        print(f"Background image: {bgImg}")
-        print(f"Instruction image: {insImg}")
+        writeLog(f"Background image: {bgImg}")
+        writeLog(f"Instruction image: {insImg}")
 
         bg_img_path = f"/sdcard/Game/Background/{bgImg}"
         ins_img_path = f"/sdcard/Game/Instruction/{insImg}"
 
         # Pull the background image
         bg_cmd = ["adb", "-s", selected_device_serial, "pull", bg_img_path]
-        print(f"Running command: {' '.join(bg_cmd)}")  # Debugging line
+        writeLog(f"Running command: {' '.join(bg_cmd)}")  # Debugging line
         if run_adb_command(bg_cmd) is None:
-            print(f"Error retrieving background image: {bg_img_path}")
+            writeLog(f"Error retrieving background image: {bg_img_path}")
             messagebox.showerror("Error", f"Error retrieving background image: {bg_img_path}")
 
         # Pull the instruction image
         ins_cmd = ["adb", "-s", selected_device_serial, "pull", ins_img_path]
-        print(f"Running command: {' '.join(ins_cmd)}")  # Debugging line
+        writeLog(f"Running command: {' '.join(ins_cmd)}")  # Debugging line
         if run_adb_command(ins_cmd) is None:
-            print(f"Error retrieving instruction image: {ins_img_path}")
+            writeLog(f"Error retrieving instruction image: {ins_img_path}")
             messagebox.showerror("Error", f"Error retrieving instruction image: {ins_img_path}")
 
         game_path = f"/sdcard/Game/Games/{game_id}"
         game_cmd = ["adb", "-s", selected_device_serial, "pull", game_path]
-        print(f"Running command: {' '.join(game_cmd)}")  # Debugging line
+        writeLog(f"Running command: {' '.join(game_cmd)}")  # Debugging line
         if run_adb_command(game_cmd) is None:
-            print(f"Error retrieving game ROM: {game_path}")
+            writeLog(f"Error retrieving game ROM: {game_path}")
             messagebox.showerror("Error", f"Error retrieving game ROM: {game_path}")
 
         # Write the CFG file
@@ -688,7 +692,7 @@ def push_artwork():
         # Verify that a ZIP file is selected and exists
         if file_path and file_path.lower().endswith('.zip') and os.path.exists(file_path):
             lbl_artwork_file.config(text="File opened: " + file_path)
-            push_files = [f"\"{file_path}\""]  # Store as list
+            push_files = [file_path]  # Store as list
             multi_files = False
         else:
             push_files = []
@@ -712,21 +716,22 @@ def push_artwork():
         run_adb_command(["adb", "-s", selected_device_serial, "shell", "mkdir", "-p", "/sdcard/Android/data/org.emulator.arcade/files/artwork"])
 
         # Check if the files exist
+        writeLog(f"push_files contents: {push_files}")
         for file_path in push_files:
-            # print("Checking file ", file_path)
+            writeLog("Checking file ", file_path)
             if not os.path.exists(file_path):
                 messagebox.showerror("Error", f"Bezel file {file_path} does not exist.")
                 return
 
         # Run adb root command
         adb_root_cmd = ["adb", "-s", selected_device, "root"]
-        # print("Running ADB Command:", adb_root_cmd)
+        writeLog("Running ADB Command:", adb_root_cmd)
         run_adb_command(adb_root_cmd)
 
         # Push the artwork files
         for file_path in push_files:
             push_cmd = ["adb", "-s", selected_device, "push", file_path.strip('{').strip('}'), "/sdcard/Android/data/org.emulator.arcade/files/artwork/"]
-            # print("Running ADB Command:", push_cmd)
+            writeLog("Running ADB Command:", push_cmd)
             if run_adb_command(push_cmd) is None:
                 messagebox.showerror("Error", f"Failed to push {file_path}.")
                 return
@@ -757,23 +762,41 @@ def push_artwork():
         event.widget.config(relief="raised")
 
     def on_drop(event):
-        files = event.data.split('\n')  # Split the string by newline characters
+        # Use regular expression to extract file paths
+        files = re.findall(r'\{.*?\}|\S+', event.data)
         global push_files, multi_files
         push_files = []
         if len(files) == 1:
             multi_files = False
             # Remove curly braces if present
             cleaned_file = files[0].strip('{}')
-            push_files = [cleaned_file]  # Store as list
-            lbl_artwork_file.config(text=f"File opened: {cleaned_file}")
+            if os.path.exists(cleaned_file):
+                push_files = [cleaned_file]  # Store as list
+                lbl_artwork_file.config(text=f"File opened: {cleaned_file}")
+            else:
+                lbl_artwork_file.config(text="No valid file selected.")
+                messagebox.showerror("Error", "Selected file does not exist.")
         else:
             multi_files = True
+            valid_files = []
             for file in files:
                 # Remove curly braces if present
                 cleaned_file = file.strip('{}')
                 if os.path.exists(cleaned_file):
-                    push_files.append(cleaned_file)
-            lbl_artwork_file.config(text=f"{len(push_files)} files loaded.")
+                    valid_files.append(cleaned_file)
+                else:
+                    writeLog(f"File {cleaned_file} does not exist.")
+                    messagebox.showerror("Error", f"File {cleaned_file} does not exist.")
+            if valid_files:
+                push_files = valid_files
+                lbl_artwork_file.config(text=f"{len(valid_files)} files loaded.")
+            else:
+                push_files = []
+                lbl_artwork_file.config(text="No valid file selected.")
+                messagebox.showerror("Error", "No valid bezel files were selected.")
+
+        writeLog("Final list of files to push:", push_files)
+
 
 
     push_artwork_window.drop_target_register(DND_FILES)
@@ -802,7 +825,7 @@ def fix_license():
     license_update_cmd = "\"update CONFIG set Preload='1';\""
     db_exec_cmd = ["adb", "-s", selected_device, "shell", "sqlite3", db_loc, license_update_cmd]
 
-    # print("Running ADB Command:", db_exec_cmd)  # Print for debugging
+    writeLog("Running ADB Command:", db_exec_cmd)  # writeLog for debugging
     if run_adb_command(db_exec_cmd) == None:
         messagebox.showerror("Error", "License fix failed.")
     else:
@@ -853,20 +876,20 @@ def push_sounds():
 
         # Check if the files exist
         for filePath in push_files:
-            # print("Checking file ", filePath)
+            writeLog("Checking file ", filePath)
             if not os.path.exists(filePath):
                 messagebox.showerror("Error", f"Sample file {filePath} does not exist.")
                 return
 
         # Run adb root command
         adb_root_cmd = ["adb", "-s", selected_device, "root"]
-        # print("Running ADB Command:", adb_root_cmd)
+        writeLog("Running ADB Command:", adb_root_cmd)
         run_adb_command(adb_root_cmd)
 
         # Push the sample files
         for filePath in push_files:
             push_cmd = ["adb", "-s", selected_device, "push", filePath, "/sdcard/Android/data/org.emulator.arcade/files/samples/"]
-            # print("Running ADB Command:", push_cmd)
+            writeLog("Running ADB Command:", push_cmd)
             if run_adb_command(push_cmd) is None:
                 messagebox.showerror("Error", f"Failed to push {filePath}.")
                 return
@@ -920,7 +943,8 @@ def push_sounds():
                 if os.path.exists(cleaned_file):
                     valid_files.append(cleaned_file)
                 else:
-                    print(f"File {cleaned_file} does not exist.")
+                    writeLog(f"File {cleaned_file} does not exist.")
+                    messagebox.showerror("Error", f"File {cleaned_file} does not exist.")
             if valid_files:
                 push_files = valid_files
                 lbl_sample_file.config(text=f"{len(valid_files)} files loaded.")
@@ -929,7 +953,7 @@ def push_sounds():
                 lbl_sample_file.config(text="No valid file selected.")
                 messagebox.showerror("Error", "No valid sample files were selected.")
 
-        print("Final list of files to push:", push_files)
+        writeLog("Final list of files to push:", push_files)
 
 
 
@@ -981,7 +1005,7 @@ def developer_tools():
                 pushError = True
         if not pushError:
             push_cmd = ["adb", "-s", selected_device, "push", "adbtcp.rc", "/etc/init/"]
-            # print("Running ADB Command:", push_cmd)
+            writeLog("Running ADB Command:", push_cmd)
             if run_adb_command(push_cmd) == None:
                 pushError = True
         if not pushError:
@@ -1006,27 +1030,17 @@ def on_listbox_select(event):
         selected_device_serial = selected
         current_device.config(text=selected)
     else:
-        print("No valid selection in listbox")
-
-# def run_adb_command(command):
-#     try:
-#         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-#         if result.returncode != 0:
-#             raise Exception(result.stderr)
-#         return result.stdout
-#     except Exception as e:
-#         messagebox.showerror("Error", f"ADB command {' '.join(command)} failed: {e}")
-#         return None
+        writeLog("No valid selection in listbox")
 
 def run_adb_command(command):
     try:
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
-            print(f"ADB command {' '.join(command)} failed: {result.stderr.strip()}")
+            writeLog(f"ADB command {' '.join(command)} failed: {result.stderr.strip()}")
             return None
         return result.stdout.strip()
     except Exception as e:
-        print(f"Failed to run adb command: {e}")
+        writeLog(f"Failed to run adb command: {e}")
         return None
 
 
