@@ -5,7 +5,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 import win32gui, win32con, ctypes
 from lxml import etree
 
-VERSION_NUMBER = "0.6"
+VERSION_NUMBER = "0.8"
 debugEnabled = False
 
 def writeLog(*logText):
@@ -115,6 +115,7 @@ def push_cfg():
                     <xs:simpleContent>
                         <xs:extension base="xs:string">
                             <xs:attribute name="type" type="xs:string" use="required"/>
+                            <xs:attribute name="sensitivity" type="xs:string" use="optional"/>
                         </xs:extension>
                     </xs:simpleContent>
                 </xs:complexType>
@@ -146,7 +147,7 @@ def push_cfg():
 
                 <xs:complexType name="UIWarningsType">
                     <xs:sequence>
-                        <xs:element name="feature" type="FeatureType" maxOccurs="unbounded"/>
+                        <xs:element name="feature" type="FeatureType" minOccurs="0" maxOccurs="unbounded"/>
                     </xs:sequence>
                     <xs:attribute name="launched" type="xs:string" use="optional"/>
                     <xs:attribute name="warned" type="xs:string" use="optional"/>
