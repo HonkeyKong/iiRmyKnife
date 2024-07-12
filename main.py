@@ -5,7 +5,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 import win32gui, win32con, ctypes
 from lxml import etree
 
-VERSION_NUMBER = "0.8"
+VERSION_NUMBER = "0.9"
 debugEnabled = False
 
 def writeLog(*logText):
@@ -273,7 +273,8 @@ def push_cfg():
             return
         
         db_loc = "/data/data/com.iircade.iiconsole/databases/Game.db"
-        db_update_cmd = "\"update GAME set Reserve1='T#0#1' where GAME.ID='{rom_name}.zip';\""
+        db_update_cmd = f"\"update GAME set Reserve1='T#0#1' where GAME.ID='{rom_name.split('/')[-1]}.zip';\""
+        print("DB Update command = ", db_update_cmd)
         db_exec_cmd = ["adb", "-s", selected_device, "shell", "sqlite3", db_loc, db_update_cmd]
         writeLog("Running ADB Command:", db_exec_cmd)
         if run_adb_command(db_exec_cmd) == None:
