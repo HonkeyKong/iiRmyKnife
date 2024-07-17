@@ -2,8 +2,12 @@ import tkinter as tk
 from tkinter import messagebox, filedialog, ttk
 import os, subprocess, zipfile, re
 from tkinterdnd2 import DND_FILES, TkinterDnD
-import win32gui, win32con, ctypes
 from lxml import etree
+import platform
+
+if platform.system() == "Windows":
+    import win32gui, win32con, ctypes
+
 
 VERSION_NUMBER = "0.9"
 debugEnabled = False
@@ -14,12 +18,13 @@ def writeLog(*logText):
             print("[iiRmyKnife]:", ' '.join(map(str, logText)))
 
 def minimize_console():
-    # Get the console window handle
-    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-    
-    if hwnd:
-        # Minimize the window
-        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+    if platform.system() == "Windows":
+        # Get the console window handle
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        
+        if hwnd:
+            # Minimize the window
+            win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
 
 # Minimize the console window at the start
 minimize_console()
@@ -69,112 +74,124 @@ def push_cfg():
 
     def validate_cfg(file_path):
         xsd_data = """
-            <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-                <xs:element name="mameconfig">
-                    <xs:complexType>
-                        <xs:sequence>
-                            <xs:element name="system" type="SystemType" maxOccurs="unbounded"/>
-                        </xs:sequence>
-                        <xs:attribute name="version" type="xs:string" use="required"/>
-                    </xs:complexType>
-                </xs:element>
-
-                <xs:complexType name="SystemType">
-                    <xs:choice maxOccurs="unbounded">
-                        <xs:element name="input" type="InputType" minOccurs="0" maxOccurs="unbounded"/>
-                        <xs:element name="video" type="VideoType" minOccurs="0" maxOccurs="unbounded"/>
-                        <xs:element name="counters" type="CountersType" minOccurs="0" maxOccurs="unbounded"/>
-                        <xs:element name="ui_warnings" type="UIWarningsType" minOccurs="0" maxOccurs="unbounded"/>
-                        <xs:element name="crosshairs" type="CrosshairsType" minOccurs="0" maxOccurs="unbounded"/>
-                    </xs:choice>
-                    <xs:attribute name="name" type="xs:string" use="required"/>
-                </xs:complexType>
-
-                <xs:complexType name="InputType">
+           <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+            <xs:element name="mameconfig">
+                <xs:complexType>
                     <xs:sequence>
-                        <xs:element name="port" type="PortType" maxOccurs="unbounded"/>
+                        <xs:element name="system" type="SystemType" maxOccurs="unbounded"/>
                     </xs:sequence>
+                    <xs:attribute name="version" type="xs:string" use="required"/>
                 </xs:complexType>
+            </xs:element>
 
-                <xs:complexType name="PortType" mixed="true">
-                    <xs:sequence>
-                        <xs:element name="newseq" type="NewSeqType" minOccurs="0" maxOccurs="unbounded"/>
-                    </xs:sequence>
-                    <xs:attribute name="tag" type="xs:string" use="required"/>
-                    <xs:attribute name="type" type="xs:string" use="required"/>
-                    <xs:attribute name="mask" type="xs:string" use="required"/>
-                    <xs:attribute name="defvalue" type="xs:string" use="required"/>
-                    <xs:attribute name="keydelta" type="xs:string" use="optional"/>
-                    <xs:attribute name="centerdelta" type="xs:string" use="optional"/>
-                    <xs:attribute name="reverse" type="xs:string" use="optional"/>
-                    <xs:attribute name="value" type="xs:string" use="optional"/>
-                    <xs:attribute name="sensitivity" type="xs:string" use="optional"/>
-                </xs:complexType>
+            <xs:complexType name="SystemType">
+                <xs:choice maxOccurs="unbounded">
+                    <xs:element name="input" type="InputType" minOccurs="0" maxOccurs="unbounded"/>
+                    <xs:element name="video" type="VideoType" minOccurs="0" maxOccurs="unbounded"/>
+                    <xs:element name="counters" type="CountersType" minOccurs="0" maxOccurs="unbounded"/>
+                    <xs:element name="ui_warnings" type="UIWarningsType" minOccurs="0" maxOccurs="unbounded"/>
+                    <xs:element name="crosshairs" type="CrosshairsType" minOccurs="0" maxOccurs="unbounded"/>
+                    <xs:element name="mixer" type="MixerType" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:choice>
+                <xs:attribute name="name" type="xs:string" use="required"/>
+            </xs:complexType>
 
-                <xs:complexType name="NewSeqType">
-                    <xs:simpleContent>
-                        <xs:extension base="xs:string">
-                            <xs:attribute name="type" type="xs:string" use="required"/>
-                            <xs:attribute name="sensitivity" type="xs:string" use="optional"/>
-                        </xs:extension>
-                    </xs:simpleContent>
-                </xs:complexType>
+            <xs:complexType name="InputType">
+                <xs:sequence>
+                    <xs:element name="port" type="PortType" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:complexType>
 
-                <xs:complexType name="VideoType">
-                    <xs:sequence>
-                        <xs:element name="target" type="TargetType" maxOccurs="unbounded"/>
-                    </xs:sequence>
-                    <xs:anyAttribute processContents="lax"/>
-                </xs:complexType>
+            <xs:complexType name="PortType" mixed="true">
+                <xs:sequence>
+                    <xs:element name="newseq" type="NewSeqType" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+                <xs:attribute name="tag" type="xs:string" use="required"/>
+                <xs:attribute name="type" type="xs:string" use="required"/>
+                <xs:attribute name="mask" type="xs:string" use="required"/>
+                <xs:attribute name="defvalue" type="xs:string" use="required"/>
+                <xs:attribute name="keydelta" type="xs:string" use="optional"/>
+                <xs:attribute name="centerdelta" type="xs:string" use="optional"/>
+                <xs:attribute name="reverse" type="xs:string" use="optional"/>
+                <xs:attribute name="value" type="xs:string" use="optional"/>
+                <xs:attribute name="sensitivity" type="xs:string" use="optional"/>
+            </xs:complexType>
 
-                <xs:complexType name="TargetType">
-                    <xs:attribute name="index" type="xs:string" use="required"/>
-                    <xs:attribute name="view" type="xs:string" use="optional"/>
-                    <xs:attribute name="rotate" type="xs:string" use="optional"/>
-                </xs:complexType>
+            <xs:complexType name="NewSeqType">
+                <xs:simpleContent>
+                    <xs:extension base="xs:string">
+                        <xs:attribute name="type" type="xs:string" use="required"/>
+                        <xs:attribute name="sensitivity" type="xs:string" use="optional"/>
+                    </xs:extension>
+                </xs:simpleContent>
+            </xs:complexType>
 
-                <xs:complexType name="CountersType">
-                    <xs:sequence>
-                        <xs:element name="coins" type="CoinsType" maxOccurs="unbounded"/>
-                    </xs:sequence>
-                    <xs:anyAttribute processContents="lax"/>
-                </xs:complexType>
+            <xs:complexType name="VideoType">
+                <xs:sequence>
+                    <xs:element name="target" type="TargetType" maxOccurs="unbounded"/>
+                </xs:sequence>
+                <xs:anyAttribute processContents="lax"/>
+            </xs:complexType>
 
-                <xs:complexType name="CoinsType">
-                    <xs:attribute name="index" type="xs:string" use="required"/>
-                    <xs:attribute name="number" type="xs:string" use="required"/>
-                </xs:complexType>
+            <xs:complexType name="TargetType">
+                <xs:attribute name="index" type="xs:string" use="required"/>
+                <xs:attribute name="view" type="xs:string" use="optional"/>
+                <xs:attribute name="rotate" type="xs:string" use="optional"/>
+            </xs:complexType>
 
-                <xs:complexType name="UIWarningsType">
-                    <xs:sequence>
-                        <xs:element name="feature" type="FeatureType" minOccurs="0" maxOccurs="unbounded"/>
-                    </xs:sequence>
-                    <xs:attribute name="launched" type="xs:string" use="optional"/>
-                    <xs:attribute name="warned" type="xs:string" use="optional"/>
-                </xs:complexType>
+            <xs:complexType name="CountersType">
+                <xs:sequence>
+                    <xs:element name="coins" type="CoinsType" maxOccurs="unbounded"/>
+                </xs:sequence>
+                <xs:anyAttribute processContents="lax"/>
+            </xs:complexType>
 
-                <xs:complexType name="FeatureType">
-                    <xs:attribute name="device" type="xs:string" use="required"/>
-                    <xs:attribute name="type" type="xs:string" use="required"/>
-                    <xs:attribute name="status" type="xs:string" use="required"/>
-                </xs:complexType>
+            <xs:complexType name="CoinsType">
+                <xs:attribute name="index" type="xs:string" use="required"/>
+                <xs:attribute name="number" type="xs:string" use="required"/>
+            </xs:complexType>
 
-                <xs:complexType name="CrosshairsType">
-                    <xs:sequence>
-                        <xs:element name="crosshair" type="CrosshairType" maxOccurs="unbounded"/>
-                        <xs:element name="autotime" type="AutoTimeType" minOccurs="0"/>
-                    </xs:sequence>
-                </xs:complexType>
+            <xs:complexType name="UIWarningsType">
+                <xs:sequence>
+                    <xs:element name="feature" type="FeatureType" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+                <xs:attribute name="launched" type="xs:string" use="optional"/>
+                <xs:attribute name="warned" type="xs:string" use="optional"/>
+            </xs:complexType>
 
-                <xs:complexType name="CrosshairType">
-                    <xs:attribute name="player" type="xs:string" use="required"/>
-                    <xs:attribute name="mode" type="xs:string" use="required"/>
-                </xs:complexType>
+            <xs:complexType name="FeatureType">
+                <xs:attribute name="device" type="xs:string" use="required"/>
+                <xs:attribute name="type" type="xs:string" use="required"/>
+                <xs:attribute name="status" type="xs:string" use="required"/>
+            </xs:complexType>
 
-                <xs:complexType name="AutoTimeType">
-                    <xs:attribute name="val" type="xs:string" use="required"/>
-                </xs:complexType>
-            </xs:schema>
+            <xs:complexType name="CrosshairsType">
+                <xs:sequence>
+                    <xs:element name="crosshair" type="CrosshairType" maxOccurs="unbounded"/>
+                    <xs:element name="autotime" type="AutoTimeType" minOccurs="0"/>
+                </xs:sequence>
+            </xs:complexType>
+
+            <xs:complexType name="CrosshairType">
+                <xs:attribute name="player" type="xs:string" use="required"/>
+                <xs:attribute name="mode" type="xs:string" use="required"/>
+            </xs:complexType>
+
+            <xs:complexType name="AutoTimeType">
+                <xs:attribute name="val" type="xs:string" use="required"/>
+            </xs:complexType>
+
+            <xs:complexType name="MixerType">
+                <xs:sequence>
+                    <xs:element name="channel" type="ChannelType" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:complexType>
+
+            <xs:complexType name="ChannelType">
+                <xs:attribute name="index" type="xs:string" use="required"/>
+                <xs:attribute name="newvol" type="xs:string" use="required"/>
+            </xs:complexType>
+        </xs:schema>
         """
 
         try:
