@@ -9,7 +9,7 @@ if platform.system() == "Windows":
     import win32gui, win32con, ctypes
 
 
-VERSION_NUMBER = "0.9"
+VERSION_NUMBER = "0.10"
 debugEnabled = False
 
 def writeLog(*logText):
