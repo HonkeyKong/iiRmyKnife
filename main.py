@@ -8,8 +8,7 @@ import platform
 if platform.system() == "Windows":
     import win32gui, win32con, ctypes
 
-
-VERSION_NUMBER = "0.10"
+VERSION_NUMBER = "0.11"
 debugEnabled = False
 
 def writeLog(*logText):
@@ -1051,9 +1050,25 @@ def on_listbox_select(event):
     else:
         writeLog("No valid selection in listbox")
 
+# def run_adb_command(command):
+#     try:
+#         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+#         if result.returncode != 0:
+#             writeLog(f"ADB command {' '.join(command)} failed: {result.stderr.strip()}")
+#             return None
+#         return result.stdout.strip()
+#     except Exception as e:
+#         writeLog(f"Failed to run adb command: {e}")
+#         return None
+
 def run_adb_command(command):
     try:
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if platform.system() == "Windows":
+            # Prevent console window from opening
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
         if result.returncode != 0:
             writeLog(f"ADB command {' '.join(command)} failed: {result.stderr.strip()}")
             return None
@@ -1061,7 +1076,6 @@ def run_adb_command(command):
     except Exception as e:
         writeLog(f"Failed to run adb command: {e}")
         return None
-
 
 def populate_devices():
     """Runs `adb devices`, parses the output, and populates the listbox."""
