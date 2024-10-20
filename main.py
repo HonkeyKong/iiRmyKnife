@@ -4,11 +4,12 @@ import os, subprocess, zipfile, re
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from lxml import etree
 import platform
+import zipfile
 
 if platform.system() == "Windows":
     import win32gui, win32con, ctypes
 
-VERSION_NUMBER = "0.11"
+VERSION_NUMBER = "0.12"
 debugEnabled = False
 
 def writeLog(*logText):
@@ -39,6 +40,157 @@ root.grid_rowconfigure((0, 1, 2), weight=1)
 
 # Global variable to store the selected device's serial number
 selected_device_serial = ""
+
+def push_games():
+    if not selected_device_serial:
+        messagebox.showerror("Error", "Select a device first.")
+        return
+    
+    multi_files = False
+
+    selected_device = selected_device_serial
+
+    install_command = ["adb", "-s", selected_device_serial, "shell", "am start com.iircade.iiconsole/.GameAdd_Popup"]
+    
+    def is_valid_zip_file(zip_file):
+        try:
+            with zipfile.ZipFile(zip_file) as zf:
+                for name in zf.namelist():
+                    if name.startswith("games/") and len(name) > len("games/"):  # Check for "games/" prefix and additional characters
+                        return True
+                return False  # No "games/" folder found
+        except zipfile.BadZipfile:
+            return False
+        
+    def select_game():
+        global push_files, multi_files
+        file_path = filedialog.askopenfilename(
+            title="Select a game package",
+            filetypes=[("iiRcade Games", "*.zip")]
+        )
+        push_game_window.lift()  # Re-lift after file dialog is opened
+        push_game_window.focus_force()  # Ensure window regains focus
+
+        # Verify that a ZIP file is selected and exists
+        if file_path and file_path.lower().endswith('.zip') and os.path.exists(file_path) and is_valid_zip_file(file_path):
+            lbl_game_file.config(text="File opened: " + file_path)
+            push_files = [file_path]
+            multi_files = False
+        else:
+            push_files = []
+            lbl_game_file.config(text="No valid file selected.")
+            if file_path and not file_path.lower().endswith('.zip'):
+                messagebox.showerror("Error", "Selected file is not a ZIP file.")
+
+    def push_game_file():
+        global selected_device, push_files #, multi_files
+        if not selected_device_serial:
+            messagebox.showerror("Error", "Select a device first.")
+            return
+        
+        selected_device = selected_device_serial
+
+        if not push_files and not multi_files:
+            messagebox.showerror("Error", "Select a game file first.")
+            return
+
+        # Create the directory in case it doesn't exist.
+        run_adb_command(["adb", "-s", selected_device_serial, "shell", "mkdir", "-p", "/sdcard/Game_Batch"])
+
+        # Check if the files exist
+        for filePath in push_files:
+            writeLog("Checking file ", filePath)
+            if not os.path.exists(filePath):
+                messagebox.showerror("Error", f"Game file {filePath} does not exist.")
+                return
+
+        # Run adb root command
+        adb_root_cmd = ["adb", "-s", selected_device, "root"]
+        writeLog("Running ADB Command:", adb_root_cmd)
+        run_adb_command(adb_root_cmd)
+
+        # Push the game files
+        for filePath in push_files:
+            push_cmd = ["adb", "-s", selected_device, "push", filePath, "/sdcard/Game_Batch"]
+            writeLog("Running ADB Command:", push_cmd)
+            if run_adb_command(push_cmd) is None:
+                messagebox.showerror("Error", f"Failed to push {filePath}.")
+                return
+        
+        # Call the game installer on the iiRcade cabinet
+        run_adb_command(install_command)
+
+        messagebox.showinfo("Success", "All games pushed successfully.")
+
+    # Use TkinterDnD.Toplevel for the new window
+    push_game_window = tk.Toplevel(root)
+    push_game_window.title("Push Games")
+    push_game_window.lift()  # Ensure the window is above the main window
+    push_game_window.focus_force()  # Ensure the window gets focus
+
+    # Bind focus events to keep the window on top
+    push_game_window.bind("<FocusIn>", lambda e: push_game_window.lift())
+    push_game_window.bind("<Configure>", lambda e: push_game_window.lift())
+
+    tk.Button(push_game_window, text="Select Game", command=select_game).grid(row=0, column=0, padx=10, pady=10)
+    tk.Button(push_game_window, text="Push Games", command=push_game_file).grid(row=1, column=0, padx=10, pady=10)
+
+    lbl_game_file = tk.Label(push_game_window, text="Select a game package with the button above, or drag & drop here.")
+    lbl_game_file.grid(row=2, column=0, columnspan=1, padx=10, pady=10)
+
+    def on_drag_enter(event):
+        event.widget.focus_force()
+        event.widget.config(relief="sunken")
+
+    def on_drag_leave(event):
+        event.widget.config(relief="raised")
+
+    def on_drop(event):
+        # Use regular expression to extract file paths
+        files = re.findall(r'\{.*?\}|\S+', event.data)
+        global push_files
+        push_files = []
+        if len(files) == 1:
+            multi_files = False
+            # Remove curly braces if present
+            cleaned_file = files[0].strip('{}')
+            if os.path.exists(cleaned_file):
+                push_files = [cleaned_file]  # Store as list
+                lbl_game_file.config(text=f"File opened: {cleaned_file}")
+            else:
+                lbl_game_file.config(text="No valid file selected.")
+                messagebox.showerror("Error", "Selected file does not exist.")
+        else:
+            multi_files = True
+            valid_files = []
+            for file in files:
+                # Remove curly braces if present
+                cleaned_file = file.strip('{}')
+                if os.path.exists(cleaned_file):
+                    print(cleaned_file)
+                    if is_valid_zip_file(cleaned_file):
+                        valid_files.append(cleaned_file)
+                    else:
+                        print("That file's fucked up.")
+                else:
+                    writeLog(f"File {cleaned_file} does not exist.")
+                    messagebox.showerror("Error", f"File {cleaned_file} does not exist.")
+            if valid_files:
+                push_files = valid_files
+                lbl_game_file.config(text=f"{len(valid_files)} files loaded.")
+            else:
+                push_files = []
+                lbl_game_file.config(text="No valid file selected.")
+                messagebox.showerror("Error", "No valid game files were selected.")
+
+        writeLog("Final list of files to push:", push_files)
+
+
+    push_game_window.drop_target_register(DND_FILES)
+    push_game_window.dnd_bind('<<DragEnter>>', on_drag_enter)
+    push_game_window.dnd_bind('<<DragLeave>>', on_drag_leave)
+    push_game_window.dnd_bind('<<Drop>>', on_drop)    
+
 
 # Define button actions
 def push_cfg():
@@ -536,10 +688,61 @@ def game_manager():
             # Sort the game_details list alphabetically by game_id
             sorted_games = sorted(game_details, key=lambda x: x[2])
 
-            game_listbox.delete(0, tk.END)  # Clear existing entries
-            for game_number, game_id, game_name in sorted_games:
-                game_listbox.insert(tk.END, f"Number: {game_number}, ID: {game_id}, Name: {game_name}")
+            global all_games # Declare all_games as global
+            all_games = sorted_games  # Store all games in the global variable
 
+            game_listbox.delete(0, tk.END)  # Clear existing entries
+            for game_number, game_id, game_name in all_games:
+                game_listbox.insert(tk.END, f"Name: {game_name}, ID: {game_id}")
+
+        # Get storage information
+        storage_info = get_storage_info(selected_device_serial)
+        storage_label.config(text=storage_info) # Update the label
+
+    def filter_games():
+        search_term = search_entry.get().lower()
+        filtered_games = [game for game in all_games if search_term in game[2].lower()]  # Access game name correctly
+
+        game_listbox.delete(0, tk.END)
+        for game in filtered_games:
+            game_listbox.insert(tk.END, f"Name: {game[2]}, ID: {game[1]}")
+
+    def sort_games():
+        selected_option = sort_combobox.get()
+        if selected_option == "Name (Ascending)":
+            sorted_games = sorted(all_games, key=lambda x: x[2].lower())
+        elif selected_option == "Name (Descending)":
+            sorted_games = sorted(all_games, key=lambda x: x[2].lower(), reverse=True)
+        elif selected_option == "Install Order (Ascending)":
+            sorted_games = sorted(all_games, key=lambda x: int(x[0]))  # Sort by game number (install order)
+        elif selected_option == "Install Order (Descending)":
+            sorted_games = sorted(all_games, key=lambda x: int(x[0]), reverse=True)
+        else:
+            return  # Do nothing if no option is selected
+
+        game_listbox.delete(0, tk.END)
+        for game in sorted_games:
+            game_listbox.insert(tk.END, f"Name: {game[2]}, ID: {game[1]}")
+
+    def get_storage_info(device_serial):
+        try:
+            command = ["adb", "-s", device_serial, "shell", "df -h /dev/block/dm-0"]
+            output = run_adb_command(command)
+            
+            # Split the output into lines and get the relevant line
+            lines = output.splitlines()
+            for line in lines:
+                if "/dev/block/dm-0" in line:  # Find the line with storage info
+                    parts = line.split()
+                    used_space = parts[2]
+                    free_space = parts[3]
+                    return f"Used: {used_space} / Free: {free_space}"
+            return "Storage information not found."
+
+        except Exception as e:
+            writeLog(f"Error getting storage info: {e}")
+            return "Error getting storage info."
+    
     def uninstall_game_prompt():
         selected = game_listbox.curselection()
         if not selected:
@@ -673,6 +876,32 @@ def game_manager():
     button_frame = tk.Frame(game_manager_window)
     button_frame.pack(pady=10)
 
+    # Search box
+    search_frame = tk.Frame(game_manager_window)
+    search_frame.pack(pady=5)
+
+    search_label = tk.Label(search_frame, text="Search:")
+    search_label.pack(side=tk.LEFT)
+
+    search_entry = tk.Entry(search_frame)
+    search_entry.pack(side=tk.LEFT)
+
+    # search_entry.bind("<<KeyRelease>>", lambda event: filter_games())
+    search_entry.bind("<KeyRelease>", lambda event: filter_games())
+
+    # # Create and place the sorting dropdown
+    # sort_frame = tk.Frame(game_manager_window)
+    # sort_frame.pack(pady=5)
+
+    sort_options = ["Name (Ascending)", "Name (Descending)", "Install Order (Ascending)", "Install Order (Descending)"]
+    sort_combobox = ttk.Combobox(search_frame, values=sort_options)
+    sort_combobox.current(0)  # Set initial selection to "Name (Ascending)"
+    sort_combobox.pack(side=tk.RIGHT)
+    sort_combobox.bind("<<ComboboxSelected>>", lambda event: sort_games())
+
+    sort_label = tk.Label(search_frame, text="Sort by:")
+    sort_label.pack(side=tk.RIGHT)
+
     # List games button
     list_button = tk.Button(button_frame, text="List Games", command=list_installed_games)
     list_button.pack(side=tk.LEFT, padx=5)
@@ -684,6 +913,10 @@ def game_manager():
     # Extract game button
     extract_button = tk.Button(button_frame, text="Extract Game", command=extract_game)
     extract_button.pack(side=tk.LEFT, padx=5)
+
+    # Storage label
+    storage_label = tk.Label(game_manager_window, text="Start by listing your installed games.")
+    storage_label.pack(pady=5)
 
     # Create a listbox to display the list of games
     global game_listbox
@@ -821,6 +1054,122 @@ def push_artwork():
     push_artwork_window.dnd_bind('<<DragEnter>>', on_drag_enter)
     push_artwork_window.dnd_bind('<<DragLeave>>', on_drag_leave)
     push_artwork_window.dnd_bind('<<Drop>>', on_drop)
+
+
+def push_attract():
+    if not selected_device_serial:
+        messagebox.showerror("Error", "Select a device first.")
+        return
+
+    selected_device = selected_device_serial
+
+    def select_attract():
+        global push_files, multi_files
+        file_path = filedialog.askopenfilename(
+            title="Select an attract video",
+            filetypes=[("MP4 Videos", "*.mp4")]
+        )
+        push_attract_window.lift()  # Re-lift after file dialog is opened
+        push_attract_window.focus_force()  # Ensure window regains focus
+
+        # Verify that a ZIP file is selected and exists
+        if file_path and file_path.lower().endswith('.mp4') and os.path.exists(file_path):
+            lbl_attract_file.config(text="File opened: " + file_path)
+            push_files = [file_path]  # Store as list
+            multi_files = False
+        else:
+            push_files = []
+            lbl_attract_file.config(text="No valid file selected.")
+            if file_path and not file_path.lower().endswith('.mp4'):
+                messagebox.showerror("Error", "Selected file is not an MP4 file.")
+
+    def push_attract_file():
+        global selected_device, push_files, multi_files
+        if not selected_device_serial:
+            messagebox.showerror("Error", "Select a device first.")
+            return
+        
+        selected_device = selected_device_serial
+
+        if not push_files:
+            messagebox.showerror("Error", "Select a video first.")
+            return
+        
+        # Check if the files exist
+        writeLog(f"push_files contents: {push_files}")
+        for file_path in push_files:
+            writeLog("Checking file ", file_path)
+            if not os.path.exists(file_path):
+                messagebox.showerror("Error", f"Video file {file_path} does not exist.")
+                return
+
+        # Run adb root command
+        adb_root_cmd = ["adb", "-s", selected_device, "root"]
+        writeLog("Running ADB Command:", adb_root_cmd)
+        run_adb_command(adb_root_cmd)
+
+        # Delete existing attract video
+        del_cmd = ["adb", "-s", selected_device, "shell", "rm", "-rf", "/sdcard/AttractMode/*.mp4"]
+        if run_adb_command(del_cmd) is None:
+            messagebox.showerror("Error", "Failed to delete old attract video.")
+            return
+
+        # Push the attract files
+        for file_path in push_files:
+            push_cmd = ["adb", "-s", selected_device, "push", file_path.strip('{').strip('}'), "/sdcard/AttractMode/"]
+            writeLog("Running ADB Command:", push_cmd)
+            if run_adb_command(push_cmd) is None:
+                messagebox.showerror("Error", f"Failed to push {file_path}.")
+                return
+        
+        messagebox.showinfo("Success", "Attract video pushed successfully.")
+
+    # Use TkinterDnD.Toplevel for the new window
+    push_attract_window = tk.Toplevel(root)
+    push_attract_window.title("Push Attract Video")
+    push_attract_window.lift()  # Ensure the window is above the main window
+    push_attract_window.focus_force()  # Ensure the window gets focus
+
+    # Bind focus events to keep the window on top
+    push_attract_window.bind("<FocusIn>", lambda e: push_attract_window.lift())
+    push_attract_window.bind("<Configure>", lambda e: push_attract_window.lift())
+
+    tk.Button(push_attract_window, text="Select Video", command=select_attract).grid(row=0, column=0, padx=10, pady=10)
+    tk.Button(push_attract_window, text="Push Video", command=push_attract_file).grid(row=1, column=0, padx=10, pady=10)
+
+    lbl_attract_file = tk.Label(push_attract_window, text="Select a video file with the button above, or drag & drop here.")
+    lbl_attract_file.grid(row=2, column=0, columnspan=1, padx=10, pady=10)
+
+    def on_drag_enter(event):
+        event.widget.focus_force()
+        event.widget.config(relief="sunken")
+
+    def on_drag_leave(event):
+        event.widget.config(relief="raised")
+
+    def on_drop(event):
+        # Use regular expression to extract file paths
+        files = re.findall(r'\{.*?\}|\S+', event.data)
+        global push_files, multi_files
+        push_files = []
+        if len(files) == 1:
+            multi_files = False
+            # Remove curly braces if present
+            cleaned_file = files[0].strip('{}')
+            if os.path.exists(cleaned_file):
+                push_files = [cleaned_file]  # Store as list
+                lbl_attract_file.config(text=f"File opened: {cleaned_file}")
+            else:
+                lbl_attract_file.config(text="No valid file selected.")
+                messagebox.showerror("Error", "Selected file does not exist.")
+        else:
+            messagebox.showerror("Error", "Only one video can be pushed.")
+            return
+        
+    push_attract_window.drop_target_register(DND_FILES)
+    push_attract_window.dnd_bind('<<DragEnter>>', on_drag_enter)
+    push_attract_window.dnd_bind('<<DragLeave>>', on_drag_leave)
+    push_attract_window.dnd_bind('<<Drop>>', on_drop)
 
 
 def reboot_cabinet():
@@ -989,6 +1338,7 @@ def restart_launcher():
     command = ["adb", "-s", serial_number, "shell", "am", "force-stop", "com.iircade.iiconsole"]
     run_adb_command(command)
 
+
 # Developer Tools function
 def developer_tools():
     if not selected_device_serial:
@@ -1033,6 +1383,17 @@ def developer_tools():
             messagebox.showerror("Error", "Enabling Wi-Fi debugging failed.")
         else:
             messagebox.showinfo("Success", "Wi-Fi debugging enabled permanently.\nBe aware that it can take your iiRcade\na few minutes after rebooting to\nreconnect to the network.")
+    
+    def enable_recovery():
+        if messagebox.askyesno("Confirm Reboot", "Are you sure you want to reboot the device into recovery mode?"):
+            if selected_device_serial:
+                command = ["adb", "-s", selected_device_serial, "reboot", "recovery"]
+                if run_adb_command(command) == None:
+                    messagebox.showerror("Error", "Failed to reboot to recovery.")
+                else:
+                    messagebox.showinfo("Success", "Device rebooted to recovery mode.")
+            else:
+                messagebox.showerror("Error", "No device selected.")
 
     # Create buttons for developer tools
     btn_adb_temp = tk.Button(developer_tools_window, text="Enable ADB over Wi-Fi (Temporary)", command=enable_adb_temp)
@@ -1040,6 +1401,40 @@ def developer_tools():
 
     btn_adb_perm = tk.Button(developer_tools_window, text="Enable ADB over Wi-Fi (Permanent)", command=enable_adb_perm)
     btn_adb_perm.pack(pady=10)
+    
+    btn_adb_perm = tk.Button(developer_tools_window, text="Enable Recovery Mode", command=enable_recovery)
+    btn_adb_perm.pack(pady=10)
+
+# Trackball Fix function
+def trackball_fix():
+    if not selected_device_serial:
+        messagebox.showerror("Error", "Select a device first.")
+        return
+    
+    # Create the trackball fix window
+    trackball_fix_window = tk.Toplevel(root)
+    trackball_fix_window.title("Trackball/Spinner Sensitivity Fix")
+
+    global sensitivity_var
+    sensitivity_var = tk.IntVar(value=7)  # Default sensitivity
+
+        # Function to set sensitivity
+    def apply_sensitivity():
+        serial_number = selected_device_serial
+        sensitivity = str(sensitivity_var.get())
+        command = ["adb", "-s", serial_number, "shell", "settings", "put", "system", "pointer_speed", sensitivity]
+        if run_adb_command(command) == None:
+            messagebox.showerror("Error", "Error setting sensitivity.")
+        else:
+            messagebox.showinfo("Success", f"Sensitivity set to {sensitivity}.")
+
+    # Sensitivity selection (using Spinbox)
+    ttk.Label(trackball_fix_window, text="Sensitivity (1-7):").grid(row=0, column=0, padx=5, pady=5)
+    ttk.Spinbox(trackball_fix_window, from_=1, to=7, textvariable=sensitivity_var).grid(row=0, column=1, padx=5, pady=5)
+
+    # Apply button
+    ttk.Button(trackball_fix_window, text="Apply", command=apply_sensitivity).grid(row=1, column=0, columnspan=2, pady=10)
+
 
 def on_listbox_select(event):
     global selected_device_serial
@@ -1049,17 +1444,6 @@ def on_listbox_select(event):
         current_device.config(text=selected)
     else:
         writeLog("No valid selection in listbox")
-
-# def run_adb_command(command):
-#     try:
-#         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-#         if result.returncode != 0:
-#             writeLog(f"ADB command {' '.join(command)} failed: {result.stderr.strip()}")
-#             return None
-#         return result.stdout.strip()
-#     except Exception as e:
-#         writeLog(f"Failed to run adb command: {e}")
-#         return None
 
 def run_adb_command(command):
     try:
@@ -1105,21 +1489,24 @@ buttons = [
     ("Fix Licenses", fix_license),
     ("Push Sounds", push_sounds),
     ("Restart Launcher", restart_launcher),
-    ("Developer Tools", developer_tools)
+    ("Developer Tools", developer_tools),
+    ("Push Games", push_games),
+    ("Attract Video", push_attract),
+    ("Trackball Fix", trackball_fix)
 ]
 
 for i, (text, command) in enumerate(buttons):
     btn = tk.Button(root, text=text, command=command)
-    btn.grid(row=i//3, column=i%3, padx=12, pady=10, sticky="nsew")
+    btn.grid(row=i // 3, column=i % 3, padx=12, pady=10, sticky="nsew")
 
-# Listbox for LBDevices
+# Listbox for LBDevices 
 lb_devices = tk.Listbox(root, height=4)  # Adjust height as needed
-lb_devices.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
+lb_devices.grid(row=4, column=0, columnspan=2, sticky="nsew", padx=10, pady=10) 
 lb_devices.bind("<<ListboxSelect>>", on_listbox_select)
 
-# Frame to contain the labels
+# Frame to contain the labels (moved to row 4)
 frame = tk.Frame(root)
-frame.grid(row=3, column=2, rowspan=2, sticky="nsew", padx=10, pady=10)
+frame.grid(row=4, column=2, rowspan=2, sticky="nsew", padx=10, pady=10) 
 
 # Labels for Currently Selected Device
 tk.Label(frame, text="Selected Device").pack(anchor="center")
