@@ -9,7 +9,7 @@ import zipfile
 if platform.system() == "Windows":
     import win32gui, win32con, ctypes
 
-VERSION_NUMBER = "0.12"
+VERSION_NUMBER = "0.13"
 debugEnabled = False
 
 def writeLog(*logText):
@@ -752,8 +752,8 @@ def game_manager():
         selected_index = selected[0]
         game_info = game_listbox.get(selected_index)
         try:
-            game_id = game_info.split(", ID: ")[1].split(", Name:")[0]
-            game_name = game_info.split(", Name: ")[1]
+            game_id = game_info.split(", ID: ")[1]
+            game_name = game_info.split("Name: ")[1]
         except IndexError:
             messagebox.showerror("Error", "Failed to parse game info.")
             return
@@ -772,8 +772,8 @@ def game_manager():
         selected_index = selected[0]
         game_info = game_listbox.get(selected_index)
         try:
-            game_id = game_info.split(", ID: ")[1].split(", Name:")[0]
-            game_name = game_info.split(", Name: ")[1]
+            game_id = game_info.split(", ID: ")[1]
+            game_name = game_info.split("Name: ")[1]
         except IndexError:
             messagebox.showerror("Error", "Failed to parse game info.")
             return
